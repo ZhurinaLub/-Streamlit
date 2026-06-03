@@ -1,0 +1,40 @@
+# train_model.py
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+import pickle
+
+# 1. Загружаем данные
+# Предполагаем, что файл лежит рядом
+df = pd.read_csv('synthetic_dog_breed_health_data.csv')
+
+# 2. Готовим признаки (X) и целевую переменную (y)
+# Целевая переменная - колонка 'Healthy'. Заменим пустые значения на 'No'?
+df['Healthy'] = df['Healthy'].fillna('No')
+y = df['Healthy']
+
+# Выбираем простые числовые признаки для первого раза
+feature_columns = ['Age', 'Weight (lbs)', 'Daily Walk Distance (miles)', 
+                   'Hours of Sleep', 'Play Time (hrs)', 'Annual Vet Visits']
+X = df[feature_columns]
+
+# Заполняем пропуски (в данных они есть, например, в колонке Age)
+X = X.fillna(X.mean())
+
+# 3. Кодируем целевую переменную (Yes -> 1, No -> 0)
+le = LabelEncoder()
+y_encoded = le.fit_transform(y)
+
+# 4. Обучаем простую модель
+X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42)
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+print(f"Модель обучена. Точность на тесте: {model.score(X_test, y_test):.2f}")
+
+# 5. Сохраняем модель и кодировщик цели
+with open('dog_health_model.pkl', 'wb') as f:
+    pickle.dump((model, le, feature_columns), f)
+
+print("Модель сохранена в файл 'dog_health_model.pkl'")
