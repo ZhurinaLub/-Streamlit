@@ -90,14 +90,42 @@ st.markdown("Введите данные о собаке, чтобы предс�
 @st.cache_resource
 def load_model():
     try:
-        with open('dog_health_model.pkl', 'rb') as f:
-            model, label_encoder, feature_cols = pickle.load(f)
+        # 1. Задаем правильные названия колонок
+        feature_cols = [
+            "Age",
+            "Weight (lbs)",
+            "Daily Walk Distance (miles)",
+            "Sleep Hours",
+            "Play Hours",
+            "Vet Visits/Year",
+        ]
+
+        # 2. Берем данные из уже загруженного выше датафрейма (df)
+        # Переименуем колонки в df, если в CSV они называются по-старому
+        rename_dict = {
+            "Hours of Sleep": "Sleep Hours",
+            "Play Time (hrs)": "Play Hours",
+            "Annual Vet Visits": "Vet Visits/Year",
+        }
+        train_df = df.rename(columns=rename_dict)
+
+        # 3. Готовим данные для обучения
+        X = train_df[feature_cols].fillna(train_df[feature_cols].mean())
+        y = train_df["Healthy"].fillna("No")
+
+        label_encoder = LabelEncoder()
+        y_encoded = label_encoder.fit_transform(y)
+
+        # 4. Быстро обучаем модель прямо на сервере Streamlit
+        model = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
+        model.fit(X, y_encoded)
+
         return model, label_encoder, feature_cols
-    except FileNotFoundError:
-        st.error("Файл с моделью 'dog_health_model.pkl' не найден. Запустите сначала `train_model.py`.")
+
+    except Exception as e:
+        st.error(f"Ошибка при подготовке модели: {e}")
         return None, None, None
 
-model, label_encoder, feature_cols = load_model()
 
 # Интерфейс для ввода данных нового экземпляра
 if model is not None:
