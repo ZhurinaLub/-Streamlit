@@ -3,12 +3,9 @@ import streamlit as st
 import pandas as pd
 import pickle
 import numpy as np
-
-# Обязательно проверьте эти две строки:
-from sklearn.ensemble import RandomForestClassifier # Нужен для обучения модели
-from sklearn.preprocessing import LabelEncoder     # Нужен для кодирования Yes/No
-
-
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder  # Обязательный импорт!
 
 # --- НАСТРОЙКА СТРАНИЦЫ ---
 st.set_page_config(page_title="Dog Health Predictor", layout="wide")
@@ -16,27 +13,23 @@ st.title("🐕 Анализ и прогнозирование здоровья �
 st.markdown("---")
 
 # --- ЗАГРУЗКА ДАННЫХ (Задание 1) ---
-# Кэшируем загрузку, чтобы данные не перечитывались при каждом взаимодействии
 @st.cache_data
 def load_data():
     df = pd.read_csv('synthetic_dog_breed_health_data.csv')
-    # Небольшая предобработка
     df['Healthy'] = df['Healthy'].fillna('No')
     return df
 
 df = load_data()
 
-# --- БОКОВАЯ ПАНЕЛЬ С КОНТРОЛАМИ (Задание 1 - не менее 5 контролов) ---
+# --- БОКОВАЯ ПАНЕЛЬ С КОНТРОЛАМИ ---
 st.sidebar.header("🔧 Панель управления")
 
-# Контрол 1: Мультивыбор пород
 breeds = st.sidebar.multiselect(
     "Выберите породы для фильтрации:",
     options=df['Breed'].dropna().unique(),
     default=[]
 )
 
-# Контрол 2: Слайдер для веса
 weight_range = st.sidebar.slider(
     "Диапазон веса (lbs):",
     min_value=float(df['Weight (lbs)'].min()),
@@ -44,22 +37,19 @@ weight_range = st.sidebar.slider(
     value=(float(df['Weight (lbs)'].min()), float(df['Weight (lbs)'].max()))
 )
 
-# Контрол 3: Выбор уровня активности
 activity_level = st.sidebar.selectbox(
     "Уровень дневной активности:",
     options=["Все"] + sorted(df['Daily Activity Level'].dropna().unique())
 )
 
-# Контрол 4: Чекбокс "Только здоровые"
 only_healthy = st.sidebar.checkbox("Показать только здоровых собак")
 
-# Контрол 5: Радио-кнопка для выбора типа графика
 plot_type = st.sidebar.radio(
     "Тип графика для визуализации:",
     options=["Гистограмма пород", "Средний вес по породам"]
 )
 
-# Применяем фильтры к данным
+# Применяем фильтры
 filtered_df = df.copy()
 if breeds:
     filtered_df = filtered_df[filtered_df['Breed'].isin(breeds)]
@@ -70,7 +60,7 @@ if activity_level != "Все":
 if only_healthy:
     filtered_df = filtered_df[filtered_df['Healthy'] == 'Yes']
 
-# --- ОСНОВНАЯ ОБЛАСТЬ (Задание 1 - отображение данных) ---
+# --- ОСНОВНАЯ ОБЛАСТЬ ---
 st.header("📊 Исходные данные")
 st.info(f"Показано записей: {len(filtered_df)} из {len(df)}")
 st.dataframe(filtered_df, use_container_width=True)
@@ -89,46 +79,36 @@ else:
 st.header("🤖 Прогнозирование здоровья собаки")
 st.markdown("Введите данные о собаке, чтобы предсказать, будет ли она здорова.")
 
-# Загружаем предварительно обученную модель
+# Модель обучается прямо здесь один раз и кэшируется
 @st.cache_resource
 def load_model():
-    try:
-        # 1. Задаем правильные названия колонок
-        feature_cols = [
-            "Age",
-            "Weight (lbs)",
-            "Daily Walk Distance (miles)",
-            "Sleep Hours",
-            "Play Hours",
-            "Vet Visits/Year",
-        ]
+    # Названия признаков, которые мы будем собирать с интерфейса
+    feature_cols = ['Age', 'Weight (lbs)', 'Daily Walk Distance (miles)', 'Sleep Hours', 'Play Hours', 'Vet Visits/Year']
+    
+    # Словарь для переименования колонок, если в вашем CSV они называются иначе
+    rename_dict = {
+        'Hours of Sleep': 'Sleep Hours',
+        'Play Time (hrs)': 'Play Hours',
+        'Annual Vet Visits': 'Vet Visits/Year'
+    }
+    train_df = df.rename(columns=rename_dict)
+    
+    # Подготовка матриц
+    X = train_df[feature_cols].fillna(train_df[feature_cols].mean())
+    y = train_df['Healthy'].fillna('No')
+    
+    # Кодирование меток
+    label_encoder = LabelEncoder()
+    y_encoded = label_encoder.fit_transform(y)
+    
+    # Обучение модели Random Forest
+    model = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
+    model.fit(X, y_encoded)
+    
+    return model, label_encoder, feature_cols
 
-        # 2. Берем данные из уже загруженного выше датафрейма (df)
-        # Переименуем колонки в df, если в CSV они называются по-старому
-        rename_dict = {
-            "Hours of Sleep": "Sleep Hours",
-            "Play Time (hrs)": "Play Hours",
-            "Annual Vet Visits": "Vet Visits/Year",
-        }
-        train_df = df.rename(columns=rename_dict)
-
-        # 3. Готовим данные для обучения
-        X = train_df[feature_cols].fillna(train_df[feature_cols].mean())
-        y = train_df["Healthy"].fillna("No")
-
-        label_encoder = LabelEncoder()
-        y_encoded = label_encoder.fit_transform(y)
-
-        # 4. Быстро обучаем модель прямо на сервере Streamlit
-        model = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
-        model.fit(X, y_encoded)
-
-        return model, label_encoder, feature_cols
-
-    except Exception as e:
-        st.error(f"Ошибка при подготовке модели: {e}")
-        return None, None, None
-
+# Вызов функции обучения
+model, label_encoder, feature_cols = load_model()
 
 # Интерфейс для ввода данных нового экземпляра
 if model is not None:
@@ -143,13 +123,13 @@ if model is not None:
         vet_visits = st.number_input("Визитов к ветеринару в год", min_value=0, max_value=10, value=1)
 
     if st.button("🔮 Предсказать здоровье", type="primary"):
-        # Создаем массив признаков в том же порядке, что и при обучении
+        # Формируем DataFrame с правильными именами колонок
         input_data = pd.DataFrame([[age, weight, walk_dist, sleep_hrs, play_hrs, vet_visits]], 
                                   columns=feature_cols)
+        
         prediction = model.predict(input_data)[0]
         probability = model.predict_proba(input_data)[0]
         
-        # Декодируем результат
         result = label_encoder.inverse_transform([prediction])[0]
         
         st.subheader("Результат прогноза:")
@@ -158,4 +138,4 @@ if model is not None:
         else:
             st.error(f"❌ Собака, возможно, НЕЗДОРОВА (Вероятность проблем: {probability[0]:.2f})")
             
-        st.caption("Примечание: Прогноз основан на анализе 10 000 синтетических записей.")
+        st.caption("Примечание: Прогноз основан на автоматическом экспресс-обучении модели.")
