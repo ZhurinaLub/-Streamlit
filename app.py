@@ -2,10 +2,13 @@
 import streamlit as st
 import pandas as pd
 import pickle
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
 import numpy as np
+
+# Обязательно проверьте эти две строки:
+from sklearn.ensemble import RandomForestClassifier # Нужен для обучения модели
+from sklearn.preprocessing import LabelEncoder     # Нужен для кодирования Yes/No
+
+
 
 # --- НАСТРОЙКА СТРАНИЦЫ ---
 st.set_page_config(page_title="Dog Health Predictor", layout="wide")
